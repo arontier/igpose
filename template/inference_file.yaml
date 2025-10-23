@@ -1,0 +1,31 @@
+# [must] Working folder, a temporary folder to generate graph file & embed file
+working_path: /Archive/Home/alexbui/workspace/proteins/ab_affinity
+
+# [must] Path to a directory of PDB files
+input_path: /Arontier_1/Privates/injae/PharmAbcine/MSLN/rfantibody/output_pdbs_successful/pdbqts/H3K1_scfv_framework_3_noMSA_trunk3_step200.pred.model_idx_4.anarci_7u8c-epitope_1000bb_10seqs_42seed.rfd_988_dldesign_5_best_sequences_MSA_trunk3_step200.pred.model_idx_3.pdbqt
+
+# [must] Path to output CSV file
+output_path: /Archive/Home/alexbui/workspace/proteins/ab_affinity/test.csv
+
+# [optional] cuda device, if you want to execute using cpu, let's set to -1
+cuda: 0
+
+# [optional] number of cpu workers to generate graphs, if it's just a file set to 1 else should be larger than 1
+cpu_workers: 8
+
+# [must]
+repr_layer: 6
+
+# [optional] batch size to generate embeddings
+batch_size: 32
+
+# classification or regression
+mode: 'regression'
+
+heavy_chain_id: 'A'
+
+light_chain_id: 'B'
+
+antigen_chain_id: 'C'
+
+scheme: 'chothia'

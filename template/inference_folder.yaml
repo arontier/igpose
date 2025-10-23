@@ -1,0 +1,26 @@
+# [must] Working folder, a temporary folder to generate graph file & embed file
+working_path: /Arontier_1/Privates/alexbui/projects/ab_affinity/pharmabcine
+
+# [must] Path to metadata which contain the description of pdb files like cdr loops
+metadata_path: /Arontier_1/Privates/alexbui/projects/ab_affinity/pharmabcine/cdr_info.csv
+
+# [must] Path to a directory of PDB files
+input_path: /Arontier_1/Privates/injae/PharmAbcine/MSLN/rfantibody/output_pdbs_successful/pdbqts
+
+# [must] Path to output CSV file
+output_path: /Arontier_1/Privates/alexbui/projects/ab_affinity/pharmabcine/results_regression.csv
+
+# [optional] cuda device, if you want to execute using cpu, let's set to -1
+cuda: 0
+
+# [optional] number of cpu workers to generate graphs, if it's just a file set to 1 else should be larger than 1
+cpu_workers: 8
+
+# [must]
+repr_layer: 6
+
+# [optional] batch size to generate embeddings
+batch_size: 32
+
+# classification or regression
+mode: 'regression'
