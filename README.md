@@ -21,8 +21,9 @@ $ cd checkpoints
 $ tar -xzf deploy_models.tar.gz
 ```
 
+Inference code execution
 ```
-$ CUDA_VISIBLE_DEVICES='' python src/predict.py /path/to/inference_configuration_template.yaml
+$ CUDA_VISIBLE_DEVICES='0' python src/predict.py /path/to/inference_configuration_template.yaml
 ```
 
 Please check configs folder for configuration templates
