@@ -33,7 +33,7 @@ CKPT_PREFIX = '/Arontier_1/Privates/alexbui/projects/ab_affinity/ckpt/deploy_mod
 DEFAULT_CLASSIFICATION_MODEL_PATH = [os.path.join(CKPT_PREFIX, 'deployed_interface.pt'), os.path.join(CKPT_PREFIX, 'deployed_cdr_interface.pt')]
 DEFAULT_REGRESSION_MODEL_PATH = [os.path.join(CKPT_PREFIX, 'deployed_interface_regression.pt'), os.path.join(CKPT_PREFIX, 'deployed_cdr_interface_regression.pt')]
 # DEFAULT_MODEL_THRESHOLDS = [0.8788940740000001, 0.7968086171428571]
-DEFAULT_CLASSIFICATION_THRESHOLD = 0.6 # ensemble
+DEFAULT_CLASSIFICATION_THRESHOLD = 0.7 # ensemble
 
 def convert_pdb_to_pdbqt(input_pdb: str, working_dir: str):
     """
@@ -87,6 +87,11 @@ def extract_cdr_info(h_residues, l_residues, scheme='chothia'):
     return heavy_ids, light_ids
 
 def generate_single_graph(working_path, input_file, configurations):
+    """
+        Return:
+            g1: interface 3-hop sampling
+            g2: cdr 3-hop sampling
+    """
     # sequences
     heavy_id, heavy_index, light_id, light_index, antigen_id,antigen_index = configurations['heavy_chain_id'], configurations['heavy_chain_index'], \
                                                                             configurations['light_chain_id'], configurations['light_chain_index'], \
@@ -107,6 +112,7 @@ def generate_single_graph(working_path, input_file, configurations):
     embeddings = map_separate_embeddings(ab_embeds, ag_embeds, g)
     # sampling
     g.ndata['feat'] = embeddings
+
     g = process_graph_edges(g)
     with g.local_scope():
         # graph sampled from interface
@@ -198,9 +204,9 @@ def load_inference_config(config_path):
 
 def load_metadata(metadata_path):
     if metadata_path.endswith('.tsv'):
-        metadata = pd.read_csv(metadata_path, sep='\t')
+        metadata = pd.read_csv(metadata_path, sep='\t').fillna('')
     else:
-        metadata = pd.read_csv(metadata_path)
+        metadata = pd.read_csv(metadata_path).fillna('')
     return metadata
 
 def generate_graph_parallel(input_path, files, metadata, args, max_workers=8):
@@ -239,26 +245,27 @@ def prepare_data(configurations):
     working_path = configurations['working_path']
     metadata = load_metadata(configurations['metadata_path'])
     input_path = Path(configurations['input_path'])
-    
+    args = init_execution_args(configurations)
     files = sorted([f for f in os.listdir(input_path) if f.endswith('.pdbqt')])
     if configurations['cpu_workers'] in [-1, 1]:
         generate_graphs(0, input_path, files, metadata, args)
     else:
         generate_graph_parallel(input_path, files, metadata, args, max_workers=configurations['cpu_workers'])
+    
     generate_sequences(0, input_path, files, metadata, args)
-    all_sequences, all_lengths = load_and_merge_sequences(working_path)
-    generate_residue_embeddings(configurations['cuda'], files, all_sequences, all_lengths, args)
+    all_sequences, all_lengths, valid_files = load_and_merge_sequences(working_path)
+    generate_residue_embeddings(configurations['cuda'], valid_files, all_sequences, all_lengths, args)
 
-def load_single_model(model_path, mode='classification'):
-    ensemble_wrapper = EnsembleWrapper(model_path, mode=mode)
+def load_single_model(model_path, mode='classification', device=None):
+    ensemble_wrapper = EnsembleWrapper(model_path, mode=mode, device=device)
     args = ensemble_wrapper.configs[0]
     return ensemble_wrapper, args
 
-def load_models(configurations: dict):
+def load_models(configurations: dict, device=None):
     model_paths = configurations['models']
     models, model_configs = [], []
     for mp in model_paths:
-        model, model_config = load_single_model(mp, configurations['mode'])
+        model, model_config = load_single_model(mp, configurations['mode'], device)
         models.append(model)
         model_configs.append(model_config)
 
@@ -272,7 +279,6 @@ def init_dataloader(configurations, model_args, metadata):
                                             is_edge_onehot=model_args['edge_onehot'], embed_path=working_path, graph_fusion=False,
                                             sample_binding_site=False, khop=3, node_threshold=500, cdr=model_args['cdr'],
                                             pooling=model_args['pooling'], sep_embed=False)
-    
     dataloader = GraphDataLoader(test_dataset, batch_size=512, shuffle=False, collate_fn=collate_simple, num_workers=8, pin_memory=True)
     return dataloader
 
@@ -290,24 +296,33 @@ def single_inference(model, dataloader, device, is_cls=True):
             if not is_cls:
                 preds.append(logits)
             else:
-                probs = F.softmax(logits, dim=-1)
-                probs = probs[:,1].squeeze()
+                probs = logits[:,1].squeeze()
                 preds.append(probs)
     
     probs = torch.cat(preds, 0).cpu().numpy()
     return probs
 
+def aggregate_prediction(models, scores):
+    final_scores = 0
+    total_models = 0
+    for m, s in zip(models, scores):
+        t = len(m.models)
+        final_scores += s * t
+        total_models += t
+    return final_scores / total_models
+
 def inference(models, dataloaders, device=None, mode='classification'):
     all_probs = [single_inference(model, dataloader, device, mode=='classification')
                  for model, dataloader in zip(models, dataloaders)]
+    # aggregate probs by #num_models
+    agg_probs = aggregate_prediction(models, all_probs)
     results = {}   
     if mode == 'classification':
-        probs = scale_probability(np.mean(all_probs, axis=0), DEFAULT_CLASSIFICATION_THRESHOLD, method='asym')
+        probs = scale_probability(agg_probs, DEFAULT_CLASSIFICATION_THRESHOLD, method='asym')
         preds = (probs >= 0.5).astype(np.int32)
         results.update({'prob': probs, 'pred': preds})
-    else:
-        preds = np.mean(all_probs, axis=0)
-        results.update({'pred': preds})
+    else:        
+        results.update({'pred': agg_probs})
     return results
 
 def store_results(output_path, results, metadata):
@@ -317,17 +332,20 @@ def store_results(output_path, results, metadata):
 
 # prediction of a folder of graphs
 def predict(configurations):    
-    models, model_configs = load_models(configurations)
-    metadata = load_metadata(configurations['metadata_path'])
-    dataloaders = load_dataloaders(configurations, model_configs, metadata)
-    device = None
+    device = torch.device('cpu')
     if configurations['cuda'] != -1:
         device = torch.device(f'cuda:{configurations['cuda']}')
+    models, model_configs = load_models(configurations, device)
+    metadata = load_metadata(configurations['metadata_path'])
+    dataloaders = load_dataloaders(configurations, model_configs, metadata)
     results = inference(models, dataloaders, device, configurations['mode'])
     store_results(configurations['output_path'], results, metadata)
 
 # prediction of a single graph
 def predict_single_graph(configurations):
+    device = torch.device('cpu')
+    if configurations['cuda'] != -1:
+        device = torch.device(f'cuda:{configurations['cuda']}')
     input_file = configurations['input_path']
     working_path = configurations['working_path']
     if input_file.endswith('.pdb'):
@@ -336,24 +354,27 @@ def predict_single_graph(configurations):
     print(f"Step 1: generate graph for {input_file}")
     graphs = generate_single_graph(working_path, input_file, configurations)
     print("Step 2: Model execution")
-    models, _ = load_models(configurations)
+    models, model_configs = load_models(configurations, device)
     preds = []
+    graph_dict = {'interface': graphs[0], 'cdr': graphs[1]}
     with torch.no_grad():
-        for g, m in zip(graphs, models):
+        for m, c in zip(models, model_configs):
             m.eval()
+            g = graph_dict['cdr'] if c['cdr'] else graph_dict['interface']
+            g = g.to(device)
             logits = m(g, g.ndata['feat'], edge_attr=g.edata['attr'] if 'attr' in g.edata else None)
             if configurations['mode'] == 'classification':
-                probs = F.softmax(logits, dim=-1) 
-                probs = probs[:,1].squeeze() # (1,)
-                preds.append(probs)
+                probs = logits[:,1].squeeze() # ensemble wrapper has aldready normalized probs
+                preds.append(probs.cpu())
             else:
-                preds.append(logits.squeeze())
+                preds.append(logits.squeeze().cpu())
+    # aggregate probs by #num_models
+    agg_preds = aggregate_prediction(models, preds)
     if configurations['mode'] == 'classification':
-        p = scale_probability(np.mean(preds, axis=0), DEFAULT_CLASSIFICATION_THRESHOLD, method='asym')
-        print(f"Probability: {p}\Class {1 if p >= 0.5 else 0}")
+        p = scale_probability(agg_preds, DEFAULT_CLASSIFICATION_THRESHOLD, method='asym')
+        print(f"Probability: {p} Class {'Positive' if p >= 0.5 else 'Negative'}")
     else:
-        p = np.mean(preds)
-        print(f"Predicted score: {p}")
+        print(f"Predicted score: {agg_preds}")
     
 
 # Example of usage

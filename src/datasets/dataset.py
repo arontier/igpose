@@ -45,7 +45,7 @@ class AntibodyGraphDatasetFolder(DGLDataset):
         self.keep_resid = kargs['keep_resid'] if 'keep_resid' in kargs else False
         self.store_nids = kargs['store_nids'] if 'store_nids' in kargs else False # store original node_ids after sampling
         self.cdr_onehot = kargs['cdr_onehot'] if 'cdr_onehot' in kargs else False
-        self.cdr_pooling = True if self.cdr and 'cdr' in kargs['pooling'] else False
+        self.cdr_pooling = True if self.cdr and 'pooling' in kargs and 'cdr' in kargs['pooling'] else False
         self.edge_distance_threshold = kargs['edge_distance_threshold'] if 'edge_distance_threshold' in kargs else 0
         self.label_norm = kargs['label_norm'] if 'label_norm' in kargs else 'stdlog10'
         if self.cdr:
@@ -157,7 +157,7 @@ class AntibodyGraphDatasetFolder(DGLDataset):
             print(folder, query_id)
 
     def set_graph(self, g):
-        process_graph_edges(g, edge_dim=self.edge_dim,
+        g = process_graph_edges(g, edge_dim=self.edge_dim,
                             is_edge_onehot=self.is_edge_onehot,
                             add_reverse_edge=self.add_reverse_edge)
         if not self.use_ef:
