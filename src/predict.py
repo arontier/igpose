@@ -29,7 +29,7 @@ from datasets.dataset import AntibodyGraphDatasetFolder2
 from graph_gen.make_graph_rcsb import generate_sequences, generate_graphs, load_and_merge_sequences, get_all_chain_residues
 from graph_gen.make_graph import generate_residue_embeddings, generate_graph, get_sequence_from_residue_list, get_id_from_residue_list
 
-CKPT_PREFIX = '/Arontier_1/Privates/alexbui/projects/ab_affinity/ckpt/deploy_models'
+CKPT_PREFIX = str(Path.cwd().parent / 'checkpoints')
 DEFAULT_CLASSIFICATION_MODEL_PATH = [os.path.join(CKPT_PREFIX, 'deployed_interface.pt'), os.path.join(CKPT_PREFIX, 'deployed_cdr_interface.pt')]
 DEFAULT_REGRESSION_MODEL_PATH = [os.path.join(CKPT_PREFIX, 'deployed_interface_regression.pt'), os.path.join(CKPT_PREFIX, 'deployed_cdr_interface_regression.pt')]
 # DEFAULT_MODEL_THRESHOLDS = [0.8788940740000001, 0.7968086171428571]

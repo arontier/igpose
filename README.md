@@ -15,6 +15,12 @@ This project is under CC-BY-NC-ND-4.0 license.
 
 2. Inference code
 
+Uncompress model checkpoints
+```
+$ cd checkpoints
+$ tar -xzf deploy_models.tar.gz
+```
+
 ```
 $ CUDA_VISIBLE_DEVICES='' python src/predict.py /path/to/inference_configuration_template.yaml
 ```
