@@ -1,35 +1,44 @@
-Official source code for IgPose
+# Official Source Code for IgPose
 
-This project is under CC-BY-NC-ND-4.0 license.
+This project is licensed under the **CC-BY-NC-ND-4.0** license.
 
-## Initial environment
-- Create a conda environment ```conda create -y -n $1 python=3.12```
-- Execute the ```scripts/setup.sh``` file to install required packages
+## Environment Setup
+- **Create a conda environment:** `conda create -y -n <env_name> python=3.12`
+- **Install dependencies:** Execute the setup script to install all required packages:  
+  `bash scripts/setup.sh`
+
+---
 
 ## Inference 
-1. Prepare inference configuration file
 
-- You need to create an yaml file similar to "template/inference_configuration_template.yaml".
-- CDR information is needed for pooling layer so please please CDR information similar to "template/cdr_infor_template.csv". If the cdr_information has more than 1 CDR field for either heavy or light chain, please merge them to a single column for each. Since current dataset loader is used for both training & test, you can set values of "DockQ" & "label" columns as 0. Both csv and tsv are accepted.
+### 1. Prepare the Inference Configuration
+- **Configuration File:** Create a YAML file based on `template/inference_configuration_template.yaml`.
+- **CDR Information:** The pooling layer requires CDR data. Please provide this in a format similar to `template/cdr_info_template.csv`. **For prediction of just one pdb, you don't need this file.**
+    - **Formatting:** If the CDR data contains more than one field for either the heavy or light chain, merge them into a single column for each.
+    - **Placeholders:** Since the current data loader is used for both training and testing, you can set the values in the "DockQ" and "label" columns to `0`. 
+    - **File Types:** Both `.csv` and `.tsv` formats are accepted.
 
+### 2. Run Inference
+**Uncompress model checkpoints:**
+```bash
+cd checkpoints
+tar -xzf deploy_models.tar.gz
 
-2. Inference code
-
-Uncompress model checkpoints
-```
-$ cd checkpoints
-$ tar -xzf deploy_models.tar.gz
-```
-
-Inference code execution
-```
-$ CUDA_VISIBLE_DEVICES='0' python src/predict.py /path/to/inference_configuration_template.yaml
 ```
 
-Please check configs folder for configuration templates
+**Execute the inference script:**
 
-By default, graphs & embeddings are generated. You can skip this step if graphs are generated but prediction part occurs errors with ```--skip-data-prepare```
+```bash
+CUDA_VISIBLE_DEVICES='0' python src/predict.py /path/to/your_inference_config.yaml
 
-3. Training code
+```
 
-Training instruction will be released soon. 
+> **Note:** Please check the `configs` folder for additional configuration templates.
+
+By default, graphs and embeddings are generated. If graphs have already been generated but an error occurs during the prediction phase, you can skip the data preparation step using the `--skip-data-prepare` flag.
+
+---
+
+### 3. Training
+
+Training instructions will be released soon.
